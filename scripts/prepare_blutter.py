@@ -171,18 +171,12 @@ def patch_dartvm_cpp20(blutter_dir):
         log("dartvm_fetch_build.py not found, skip c++20 patch")
         return
     s = read(path)
-    old = '        cpp_std = "17" if pos == -1 else content[pos+8:pos+10]
-'
-    new = ('        cpp_std = "17" if pos == -1 else content[pos+8:pos+10]
-'
-           '        # FIET Windows patch: MSVC needs C++20 for designated initializers
-'
-           '        # in older Dart VM sources (e.g. message_snapshot.cc in Dart 2.14).
-'
-           '        if os.name == "nt":
-'
-           '            cpp_std = "20"
-')
+    old = '        cpp_std = "17" if pos == -1 else content[pos+8:pos+10]'
+    new = (old
+           + '\n        # FIET Windows patch: MSVC needs C++20 for designated initializers'
+           + '\n        # in older Dart VM sources (e.g. message_snapshot.cc in Dart 2.14).'
+           + '\n        if os.name == "nt":'
+           + '\n            cpp_std = "20"')
     if 'FIET Windows patch: MSVC needs C++20' in s:
         log("dartvm_fetch_build.py: c++20 patch already present")
         return
