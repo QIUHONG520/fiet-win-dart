@@ -154,3 +154,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\smoke.ps1 `
   commit already contains the `fix/dart311-leaf-runtime-ldur` merge).
 - ICU/capstone Windows binaries come from upstream blutter's
   `scripts/init_env_windows.py` (ICU 73.2, capstone 4.0.2).
+
+
+## CI matrix result (GitHub Actions, 2026-10-20)
+
+Run [#39387212824](https://github.com/QIUHONG520/fiet-win-dart/actions/runs/39387212824) on `windows-latest`:
+
+- ✅ All 9 matrix jobs built and smoke-tested successfully:
+  Dart 3.5.4 / 3.6.2 / 3.7.3 / 3.8.3 / 3.9.4 / 3.10.9 / 3.11.5 / 3.12.2 / 3.13.5
+- ⚠️ `manifest` job: artifacts + manifest.json succeeded; the final "Create release (tag builds)"
+  step failed only because release `v0.1.0-poc` already existed (created manually). Workflow now
+  marks that step `continue-on-error` so duplicate tag releases do not fail CI.
