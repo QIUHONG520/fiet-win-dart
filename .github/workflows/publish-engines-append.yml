@@ -73,7 +73,12 @@ jobs:
               name = f'dartvm-{v}-windows-x64'
               a = have.get(name)
               assert a, f'artifact not found: {name}'
-              blob = fetch(a['archive_download_url'])
+              import subprocess
+              tmp = f"/tmp/{name}.zip"
+              subprocess.run(["curl", "-sSL", "--retry", "3", "-H",
+                              f"Authorization: Bearer {token}", "-o", tmp,
+                              a["archive_download_url"]], check=True)
+              blob = open(tmp, "rb").read()
               with zipfile.ZipFile(io.BytesIO(blob)) as z:
                   for m in z.namelist():
                       base = os.path.basename(m)
@@ -95,20 +100,12 @@ jobs:
           token = os.environ['GITHUB_TOKEN']
           base = f'https://github.com/{repo}/releases/download/{tag}'
           manifest_path = 'manifest.json'
-          # fetch existing manifest from release (redirects to signed storage URL)
-          import urllib.error
-          def fetch_release(url, timeout=120):
-              req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
-              try:
-                  with urllib.request.urlopen(req, timeout=timeout) as r:
-                      return r.read()
-              except urllib.error.HTTPError as e:
-                  if e.code in (301, 302, 303, 307, 308):
-                      with urllib.request.urlopen(e.headers['Location'], timeout=timeout) as r:
-                          return r.read()
-                  raise
+          # fetch existing manifest from the public release (curl handles the redirect)
+          import subprocess
           try:
-              manifest = json.loads(fetch_release(f'{base}/manifest.json'))
+              subprocess.run(["curl", "-sSL", "--retry", "3", "-o", "existing-manifest.json",
+                              f"{base}/manifest.json"], check=True)
+              manifest = json.load(open("existing-manifest.json"))
           except Exception as e:
               print('existing manifest unavailable, start minimal:', e)
               manifest = {"schema":1,"platform":"windows-x64","hostArch":"x86_64",
