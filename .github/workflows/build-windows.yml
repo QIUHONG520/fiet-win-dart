@@ -1,0 +1,113 @@
+name: build-windows-engines
+
+on:
+  workflow_dispatch:
+    inputs:
+      dart-versions:
+        description: 'Comma-separated Dart versions (empty = matrix default)'
+        required: false
+        default: ''
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  # Build one engine DLL per Dart version. 3.12.2 is the validated PoC baseline;
+  # the others are part of the "common versions" matrix and may need additional
+  # MSVC/Dart-version patches (see docs/STATUS.md) - they are marked experimental
+  # so the workflow still publishes the validated engines.
+  build-engine:
+    name: engine dart-${{ matrix.dart }}
+    runs-on: windows-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { dart: '3.12.2', experimental: false }
+          - { dart: '3.11.5', experimental: true }
+          - { dart: '3.10.9', experimental: true }
+          - { dart: '3.9.4',  experimental: true }
+          - { dart: '3.8.3',  experimental: true }
+          - { dart: '3.7.3',  experimental: true }
+          - { dart: '3.6.2',  experimental: true }
+          - { dart: '3.5.4',  experimental: true }
+    continue-on-error: ${{ matrix.experimental }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps
+        run: python -m pip install --disable-pip-version-check requests
+
+      - name: Cache blutter + Dart SDK sources
+        uses: actions/cache@v4
+        with:
+          path: |
+            src/blutter
+            build/cache
+          key: fiet-win-dart-src-${{ hashFiles('scripts/fetch_blutter.py', 'scripts/fetch_dartsdk.py') }}
+
+      - name: Build engine + package
+        shell: pwsh
+        run: |
+          ./scripts/build.ps1 -DartVersion '${{ matrix.dart }}' -NoPackage
+        timeout-minutes: 110
+
+      - name: Package
+        shell: pwsh
+        run: |
+          # Reuse the packaging part of build.ps1 (fast: DLL already built).
+          ./scripts/build.ps1 -DartVersion '${{ matrix.dart }}' -SkipDartVM
+        timeout-minutes: 20
+
+      - name: Smoke (load + exports)
+        shell: pwsh
+        run: |
+          ./scripts/smoke.ps1 -EngineDir "dist/dartvm-${{ matrix.dart }}-windows-x64" -LoadOnly
+        continue-on-error: true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dartvm-${{ matrix.dart }}-windows-x64
+          path: dist/dartvm-${{ matrix.dart }}-windows-x64*
+          if-no-files-found: warn
+
+  manifest:
+    name: manifest
+    if: always()
+    needs: build-engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: dartvm-*-windows-x64
+          merge-multiple: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build manifest.json
+        run: |
+          python scripts/make_manifest.py --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+          cat manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manifest
+          path: manifest.json
+      - name: Create release (tag builds)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/*.zip
+            dist/**/SHA256SUMS.txt

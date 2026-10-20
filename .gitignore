@@ -1,0 +1,16 @@
+# build artifacts / fetched sources (not part of the source repo)
+build/
+src/
+third_party/sqlite/*.c
+third_party/sqlite/*.h
+dist/**/*.dll
+dist/**/*.zip
+dist/**/*.exe
+samples/*.apk
+samples/*.so
+*.log
+*.pdb
+*.ilk
+*.obj
+.vs/
+__pycache__/

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "name": "fiet-win-dart engines",
+  "platform": "windows-x64",
+  "hostArch": "x86_64",
+  "targetAbi": "android-arm64",
+  "dartTarget": {
+    "os": "android",
+    "arch": "arm64",
+    "compressedPointers": true
+  },
+  "engineApi": {
+    "exports": [
+      "blutter_analyze",
+      "fler_engine_info"
+    ],
+    "callingConvention": "cdecl",
+    "signature": "int blutter_analyze(const char* libapp_so, const char* db_path, const char* out_dir)"
+  },
+  "releaseTag": "v0.1.0-poc",
+  "engines": [
+    {
+      "dartVersion": "3.12.2",
+      "dll": "dartvm_3.12.2_windows_x64.dll",
+      "file": "dartvm-3.12.2-windows-x64.zip",
+      "url": "https://github.com/QIUHONG520/fiet-win-dart/releases/download/v0.1.0-poc/dartvm-3.12.2-windows-x64.zip",
+      "sha256": "173f848795f5716bcf80695755c77ed1e9cc1516abeec3b3d1d7da3a69d9157a",
+      "sizeBytes": 16444033,
+      "runtimeDeps": [
+        "capstone.dll",
+        "icuuc73.dll",
+        "icudt73.dll"
+      ]
+    }
+  ]
+}
