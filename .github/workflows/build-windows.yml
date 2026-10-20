@@ -4,39 +4,78 @@ on:
   workflow_dispatch:
     inputs:
       dart-versions:
-        description: 'Comma-separated Dart versions (empty = matrix default)'
+        description: 'Comma-separated Dart versions (empty = all from BUILD_VERSIONS.txt)'
         required: false
         default: ''
         type: string
+      publish-release:
+        description: 'Create/update a Release with all built engines (tag builds always publish)'
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  # Build one engine DLL per Dart version. 3.12.2 is the validated PoC baseline;
-  # the others are part of the "common versions" matrix and may need additional
-  # MSVC/Dart-version patches (see docs/STATUS.md) - they are marked experimental
-  # so the workflow still publishes the validated engines.
+  # 生成矩阵：默认读取 BUILD_VERSIONS.txt（与 fler-dart 全版本覆盖对齐），
+  # workflow_dispatch 可用 `dart-versions` 只构建指定版本。
+  prepare:
+    name: prepare matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate matrix
+        id: gen
+        shell: bash
+        env:
+          INPUT_VERSIONS: ${{ inputs.dart-versions }}
+        run: |
+          python - <<'PY'
+          import json, os
+          raw = (os.environ.get('INPUT_VERSIONS') or '').strip()
+          if raw:
+              versions = [v.strip() for v in raw.replace(';', ',').split(',') if v.strip()]
+          else:
+              versions = []
+              with open('BUILD_VERSIONS.txt', encoding='utf-8') as f:
+                  for line in f:
+                      line = line.strip()
+                      if line and not line.startswith('#'):
+                          versions.append(line)
+          # 3.12.2 / 3.13.5 是已验证基线；其余版本先允许失败（continue-on-error），
+          # 待全矩阵实测后逐步收紧。
+          validated = {'3.12.2', '3.13.5'}
+          include = [{'dart': v, 'experimental': v not in validated} for v in versions]
+          matrix = {'include': include}
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write('matrix=' + json.dumps(matrix, separators=(',', ':')) + '\n')
+          print(f'[matrix] {len(include)} versions')
+          print(json.dumps(include, indent=1))
+          PY
+      - name: Write version list artifact
+        run: cp BUILD_VERSIONS.txt versions.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: version-list
+          path: versions.txt
+          if-no-files-found: error
+
+  # Build one engine DLL per Dart version (Windows x64).
   build-engine:
     name: engine dart-${{ matrix.dart }}
+    needs: prepare
     runs-on: windows-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { dart: '3.12.2', experimental: false }
-          - { dart: '3.13.5', experimental: false }
-          - { dart: '3.11.5', experimental: true }
-          - { dart: '3.10.9', experimental: true }
-          - { dart: '3.9.4',  experimental: true }
-          - { dart: '3.8.3',  experimental: true }
-          - { dart: '3.7.3',  experimental: true }
-          - { dart: '3.6.2',  experimental: true }
-          - { dart: '3.5.4',  experimental: true }
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     continue-on-error: ${{ matrix.experimental }}
     steps:
       - uses: actions/checkout@v4
@@ -54,20 +93,13 @@ jobs:
           path: |
             src/blutter
             build/cache
-          key: fiet-win-dart-src-${{ hashFiles('scripts/fetch_blutter.py', 'scripts/fetch_dartsdk.py') }}
+          key: fiet-win-dart-src-${{ hashFiles('scripts/fetch_blutter.py', 'scripts/fetch_dartsdk.py', 'BUILD_VERSIONS.txt') }}
 
       - name: Build engine + package
         shell: pwsh
         run: |
-          ./scripts/build.ps1 -DartVersion '${{ matrix.dart }}' -NoPackage
+          ./scripts/build.ps1 -DartVersion '${{ matrix.dart }}'
         timeout-minutes: 110
-
-      - name: Package
-        shell: pwsh
-        run: |
-          # Reuse the packaging part of build.ps1 (fast: DLL already built).
-          ./scripts/build.ps1 -DartVersion '${{ matrix.dart }}' -SkipDartVM
-        timeout-minutes: 20
 
       - name: Smoke (load + exports)
         shell: pwsh
@@ -85,7 +117,7 @@ jobs:
   manifest:
     name: manifest
     if: always()
-    needs: build-engine
+    needs: [prepare, build-engine]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -105,12 +137,12 @@ jobs:
         with:
           name: manifest
           path: manifest.json
-      - name: Create release (tag builds)
-        if: startsWith(github.ref, 'refs/tags/')
-        # 允许 release 已存在（例如人工先创建了 tag release）时仍然上传/补齐资产，不把 CI 标红。
+      - name: Create/update release (tag builds or manual publish)
+        if: startsWith(github.ref, 'refs/tags/') || inputs.publish-release == true
         continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/**/*.zip
             dist/**/SHA256SUMS.txt
+          fail_on_unmatched_files: false
