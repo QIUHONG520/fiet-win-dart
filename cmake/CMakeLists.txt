@@ -93,7 +93,9 @@ endif()
 if(_has_type_ref)
     list(APPEND DART_COMPAT_DEFINITIONS HAS_TYPE_REF)
 endif()
-if(_has_record_type)
+# RecordType 在 Dart 2.19 的 class_id.h 中已存在（实验特性），但旧版 VM 的
+# RecordType API 与 blutter 期望的不同（无 GetFieldNames）；记录类型从 Dart 3.0 起才稳定。
+if(_has_record_type AND DART_VERSION VERSION_GREATER_EQUAL "3.0.0")
     list(APPEND DART_COMPAT_DEFINITIONS HAS_RECORD_TYPE)
 endif()
 if(_has_shared_class_table)

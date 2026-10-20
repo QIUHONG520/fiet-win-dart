@@ -159,6 +159,40 @@ def patch_dartloader(blutter_dir):
     log("DartLoader.cpp: isolate detach added")
 
 
+
+def patch_dartvm_cpp20(blutter_dir):
+    """MSVC 需要 C++20 才能编译 Dart 2.14 等旧 SDK（designated initializers 等）。
+
+    Dart 3.11+ 的 SDK 自己声明 c++20；更老版本源码里 run_clang_tidy.dart 给的
+    标准可能是 c++17，MSVC 严格模式下会报 C7555。这里在 Windows 上统一提到 20。
+    """
+    path = os.path.join(blutter_dir, "dartvm_fetch_build.py")
+    if not os.path.isfile(path):
+        log("dartvm_fetch_build.py not found, skip c++20 patch")
+        return
+    s = read(path)
+    old = '        cpp_std = "17" if pos == -1 else content[pos+8:pos+10]
+'
+    new = ('        cpp_std = "17" if pos == -1 else content[pos+8:pos+10]
+'
+           '        # FIET Windows patch: MSVC needs C++20 for designated initializers
+'
+           '        # in older Dart VM sources (e.g. message_snapshot.cc in Dart 2.14).
+'
+           '        if os.name == "nt":
+'
+           '            cpp_std = "20"
+')
+    if 'FIET Windows patch: MSVC needs C++20' in s:
+        log("dartvm_fetch_build.py: c++20 patch already present")
+        return
+    if old not in s:
+        log("WARN: dartvm_fetch_build.py cpp_std line not found")
+        return
+    write(path, s.replace(old, new, 1))
+    log("dartvm_fetch_build.py: c++20 forced on Windows")
+
+
 def patch_dartvm_cmake_template(blutter_dir):
     path = os.path.join(blutter_dir, "scripts", "CMakeLists.txt")
     s = read(path)
@@ -494,6 +528,7 @@ def main() -> int:
     patch_robust(blutter_dir)
     patch_dartloader(blutter_dir)
     patch_dartvm_cmake_template(blutter_dir)
+    patch_dartvm_cpp20(blutter_dir)
     patch_dart313_stub_support(blutter_dir)
     patch_dart313_api_changes(blutter_dir)
     patch_dart313_type_tolerance(blutter_dir)
