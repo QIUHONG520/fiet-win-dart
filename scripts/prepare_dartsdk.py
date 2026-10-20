@@ -140,6 +140,33 @@ def check_cmakelists_patched(root):
         log("Dart VM CMakeLists.txt: MSVC flags present")
 
 
+
+def patch_setjmp_address_msvc(root):
+    """Dart 2.16.x thread.h takes the address of setjmp (`reinterpret_cast<void*>(&setjmp)`).
+
+    MSVC implements setjmp as a pure intrinsic and rejects taking its address (C7552).
+    The TsanUtils helper is only used by ThreadSanitizer builds, so a nullptr is enough
+    for our non-TSAN engine build.
+    """
+    path = os.path.join(root, "runtime", "vm", "thread.h")
+    if not os.path.isfile(path):
+        log("thread.h not found, skip setjmp patch")
+        return
+    with open(path, encoding="utf-8") as f:
+        s = f.read()
+    old = "void* setjmp_function = reinterpret_cast<void*>(&setjmp);"
+    new = ("void* setjmp_function = nullptr;  "
+           "// FIET: MSVC treats setjmp as a pure intrinsic (no address)")
+    if new in s:
+        log("thread.h: setjmp address already patched")
+        return
+    if old not in s:
+        log("thread.h: no &setjmp address pattern (ok for non-2.16)")
+        return
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(s.replace(old, new, 1))
+    log("thread.h: MSVC setjmp-address patch applied (Dart 2.16.x)")
+
 def main() -> int:
     if len(sys.argv) < 2:
         print(__doc__)
@@ -164,6 +191,7 @@ def main() -> int:
     patch_assert_fatal_msvc(root)
     patch_msvc_variadic_macros(root)
     patch_unwinding_records_msvc(root)
+    patch_setjmp_address_msvc(root)
     log("done")
     return 0
 
