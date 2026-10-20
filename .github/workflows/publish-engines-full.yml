@@ -1,0 +1,121 @@
+name: publish-engines-full
+
+# 一次性把两次 CI run 的 Windows 引擎 artifacts 汇总，生成 manifest 并发布 Release。
+# 在 GitHub runner 内下载 artifacts（内部网络快），避免本地拉取 ~3GB。
+on:
+  workflow_dispatch:
+    inputs:
+      full-run-id:
+        description: 'Full-matrix workflow run id'
+        required: true
+        default: '39394973829'
+      retry-run-id:
+        description: 'Legacy retry workflow run id (2.16.x)'
+        required: true
+        default: '39402648705'
+      tag:
+        description: 'Release tag to create/update'
+        required: true
+        default: 'v0.2.0-full'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    name: collect + publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.full-run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: 'dartvm-*-windows-x64'
+          path: artifacts/full
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.retry-run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: 'dartvm-*-windows-x64'
+          path: artifacts/retry
+          merge-multiple: true
+
+      - name: Assemble dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          copy_tree() {
+            src="$1"
+            [ -d "$src" ] || return 0
+            # artifact may contain dist/ prefix or the files directly
+            for entry in "$src"/*; do
+              [ -e "$entry" ] || continue
+              base=$(basename "$entry")
+              if [ "$base" = "dist" ] && [ -d "$entry" ]; then
+                cp -rf "$entry"/* dist/
+              else
+                cp -rf "$entry" dist/
+              fi
+            done
+          }
+          # retry run last so fixed 2.16.x artifacts overwrite failed ones
+          copy_tree artifacts/full
+          copy_tree artifacts/retry
+          echo "zip count: $(find dist -maxdepth 2 -name 'dartvm-*-windows-x64.zip' | wc -l)"
+          ls dist | head -20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/make_manifest.py \
+            --base-url "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}" \
+            --version-tag "${{ inputs.tag }}" \
+            --out manifest.json
+          cp manifest.json dist/manifest.json
+          python - <<'PY'
+          import json, os
+          m = json.load(open('manifest.json'))
+          print('engines:', len(m['engines']))
+          missing = [e['dartVersion'] for e in m['engines'] if e['sizeBytes'] <= 0]
+          assert len(m['engines']) >= 100, m['engines'][:3]
+          assert not missing, missing
+          print('all engine zips have size')
+          PY
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: 'Windows x64 engines — full Dart coverage (${{ inputs.tag }})'
+          body: |
+            Full Windows x64 Blutter/Dart VM engine coverage for FIET-Windows.
+
+            - Engines: all Dart versions in `BUILD_VERSIONS.txt` (2.14.0 → 3.13.1, 105 versions)
+            - Each asset: `dartvm-<ver>-windows-x64.zip` (DLL + capstone/ICU + SHA256SUMS + LICENSE/NOTICE)
+            - `manifest.json`: machine-readable engine list (dartVersion / url / sha256 / size)
+            - Source + CI: https://github.com/QIUHONG520/fiet-win-dart
+
+            Install: unzip the matching engine zip into
+            `%LOCALAPPDATA%\\FIET-Windows\\fiet\\engines\\windows-x64\\<DartVersion>\\`,
+            then open FIET → Settings → Engines and click Refresh.
+          files: |
+            dist/**/*.zip
+            dist/manifest.json
+          fail_on_unmatched_files: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-manifest
+          path: manifest.json
