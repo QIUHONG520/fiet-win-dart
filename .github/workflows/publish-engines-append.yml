@@ -39,6 +39,21 @@ jobs:
           run_id = os.environ['RUN_ID']
           versions = [v.strip() for v in os.environ['VERSIONS'].split(',') if v.strip()]
           repo = os.environ['GITHUB_REPOSITORY']
+          import urllib.error
+
+          def fetch(url, timeout=300):
+              req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout) as r:
+                      return r.read()
+              except urllib.error.HTTPError as e:
+                  if e.code in (301, 302, 303, 307, 308):
+                      loc = e.headers['Location']
+                      # signed storage URL must be fetched WITHOUT the GitHub token
+                      with urllib.request.urlopen(loc, timeout=timeout) as r:
+                          return r.read()
+                  raise
+
           def api(url):
               req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}',
                                                          'Accept': 'application/vnd.github+json'})
@@ -58,10 +73,7 @@ jobs:
               name = f'dartvm-{v}-windows-x64'
               a = have.get(name)
               assert a, f'artifact not found: {name}'
-              req = urllib.request.Request(a['archive_download_url'],
-                                           headers={'Authorization': f'Bearer {token}'})
-              with urllib.request.urlopen(req, timeout=300) as r:
-                  blob = r.read()
+              blob = fetch(a['archive_download_url'])
               with zipfile.ZipFile(io.BytesIO(blob)) as z:
                   for m in z.namelist():
                       base = os.path.basename(m)
@@ -83,11 +95,20 @@ jobs:
           token = os.environ['GITHUB_TOKEN']
           base = f'https://github.com/{repo}/releases/download/{tag}'
           manifest_path = 'manifest.json'
-          # fetch existing manifest from release
+          # fetch existing manifest from release (redirects to signed storage URL)
+          import urllib.error
+          def fetch_release(url, timeout=120):
+              req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout) as r:
+                      return r.read()
+              except urllib.error.HTTPError as e:
+                  if e.code in (301, 302, 303, 307, 308):
+                      with urllib.request.urlopen(e.headers['Location'], timeout=timeout) as r:
+                          return r.read()
+                  raise
           try:
-              req = urllib.request.Request(f'{base}/manifest.json', headers={'Authorization': f'Bearer {token}'})
-              with urllib.request.urlopen(req, timeout=60) as r:
-                  manifest = json.load(r)
+              manifest = json.loads(fetch_release(f'{base}/manifest.json'))
           except Exception as e:
               print('existing manifest unavailable, start minimal:', e)
               manifest = {"schema":1,"platform":"windows-x64","hostArch":"x86_64",
