@@ -1,0 +1,123 @@
+name: publish-engines-append
+
+# 把指定 workflow run 中的若干引擎 artifact 追加到已有 Release，并合并 manifest.json。
+# 用于补齐全量发布时漏掉的版本，避免重新构建。
+on:
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: 'Workflow run id that contains the engine artifacts'
+        required: true
+      versions:
+        description: 'Comma-separated Dart versions to append'
+        required: true
+      tag:
+        description: 'Existing release tag to update'
+        required: true
+        default: 'v0.2.0-full'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  append:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download selected artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ inputs.run-id }}
+          VERSIONS: ${{ inputs.versions }}
+        run: |
+          python - <<'PY'
+          import io, json, os, urllib.request, zipfile
+          token = os.environ['GITHUB_TOKEN']
+          run_id = os.environ['RUN_ID']
+          versions = [v.strip() for v in os.environ['VERSIONS'].split(',') if v.strip()]
+          repo = os.environ['GITHUB_REPOSITORY']
+          def api(url):
+              req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}',
+                                                         'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(req, timeout=120) as r:
+                  return json.load(r)
+          arts = []
+          page = 1
+          while True:
+              data = api(f'https://api.github.com/repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100&page={page}')
+              arts += data.get('artifacts', [])
+              if len(data.get('artifacts', [])) < 100:
+                  break
+              page += 1
+          have = {a['name']: a for a in arts}
+          os.makedirs('dist', exist_ok=True)
+          for v in versions:
+              name = f'dartvm-{v}-windows-x64'
+              a = have.get(name)
+              assert a, f'artifact not found: {name}'
+              req = urllib.request.Request(a['archive_download_url'],
+                                           headers={'Authorization': f'Bearer {token}'})
+              with urllib.request.urlopen(req, timeout=300) as r:
+                  blob = r.read()
+              with zipfile.ZipFile(io.BytesIO(blob)) as z:
+                  for m in z.namelist():
+                      base = os.path.basename(m)
+                      if base.startswith('dartvm-') and base.endswith('-windows-x64.zip'):
+                          with z.open(m) as src, open(os.path.join('dist', base), 'wb') as dst:
+                              dst.write(src.read())
+                          print('extracted', base)
+          PY
+
+      - name: Merge manifest and publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, subprocess, urllib.request
+          tag = os.environ['TAG']
+          repo = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GITHUB_TOKEN']
+          base = f'https://github.com/{repo}/releases/download/{tag}'
+          manifest_path = 'manifest.json'
+          # fetch existing manifest from release
+          try:
+              req = urllib.request.Request(f'{base}/manifest.json', headers={'Authorization': f'Bearer {token}'})
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  manifest = json.load(r)
+          except Exception as e:
+              print('existing manifest unavailable, start minimal:', e)
+              manifest = {"schema":1,"platform":"windows-x64","hostArch":"x86_64",
+                          "targetAbi":"android-arm64","engineApi":{"exports":["blutter_analyze","fler_engine_info"],"callingConvention":"cdecl"},
+                          "engines":[]}
+          by_ver = {e['dartVersion']: e for e in manifest.get('engines', [])}
+          for name in sorted(os.listdir('dist')):
+              if not name.startswith('dartvm-') or not name.endswith('-windows-x64.zip'):
+                  continue
+              ver = name[len('dartvm-'):-len('-windows-x64.zip')]
+              path = os.path.join('dist', name)
+              h = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+              by_ver[ver] = {"dartVersion": ver,
+                             "dll": "",  # filled from zip listing below if available
+                             "file": name,
+                             "url": f'{base}/{name}',
+                             "sha256": h,
+                             "sizeBytes": os.path.getsize(path),
+                             "runtimeDeps": ["capstone.dll","icuuc73.dll","icudt73.dll"]}
+          manifest['engines'] = sorted(by_ver.values(), key=lambda e: [int(x) for x in e['dartVersion'].split('.')])
+          json.dump(manifest, open('manifest.json','w'), indent=2, ensure_ascii=False)
+          print('manifest engines:', len(manifest['engines']))
+          PY
+
+      - name: Upload missing engines + manifest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: |
+            dist/*.zip
+            manifest.json
+          overwrite_files: true
+          fail_on_unmatched_files: false
