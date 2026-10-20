@@ -26,9 +26,11 @@ with:
 * SQLite amalgamation for the result database (schema matches fler-dart, so
   FIET's `BlutterDbReader` can read it unchanged).
 
-> Status: **proof of concept** — one Dart version (3.12.2) builds and produces a
-> DLL; the CI matrix and multi-version packaging are in progress. See
-> [`docs/STATUS.md`](docs/STATUS.md) for the exact current state and next steps.
+> Status: **validated** — Dart **3.13.5** builds and passes a full real-sample
+> analysis on Windows x64 (FluffyChat 2.11.1: 10,715 classes / 82,125 methods /
+> 75,049 asm blocks in 15.4 s), Dart **3.12.2** builds and loads. See
+> [`docs/STATUS.md`](docs/STATUS.md) for E2E numbers, Dart 3.13 patch details,
+> known limitations and the CI matrix status.
 
 ## Repository layout
 

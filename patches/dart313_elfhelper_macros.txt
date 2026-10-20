@@ -1,0 +1,14 @@
+#if defined(BLUTTER_DART_3_13_SINGLE_SNAPSHOT)
+// Dart 3.13 single snapshot: libapp.so embeds one data+text pair
+// (_kDartSnapshotData/_kDartSnapshotText) for both VM and isolate state.
+#define FLER_SNAPSHOT_DATA_SYM kSnapshotDataAsmSymbol
+#define FLER_SNAPSHOT_TEXT_SYM kSnapshotTextAsmSymbol
+#define FLER_ISOLATE_DATA_SYM FLER_SNAPSHOT_DATA_SYM
+#define FLER_ISOLATE_TEXT_SYM FLER_SNAPSHOT_TEXT_SYM
+#else
+#define FLER_SNAPSHOT_DATA_SYM kVmSnapshotDataAsmSymbol
+#define FLER_SNAPSHOT_TEXT_SYM kVmSnapshotInstructionsAsmSymbol
+#define FLER_ISOLATE_DATA_SYM kIsolateSnapshotDataAsmSymbol
+#define FLER_ISOLATE_TEXT_SYM kIsolateSnapshotInstructionsAsmSymbol
+#endif
+

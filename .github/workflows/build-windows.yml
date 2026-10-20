@@ -29,6 +29,7 @@ jobs:
       matrix:
         include:
           - { dart: '3.12.2', experimental: false }
+          - { dart: '3.13.5', experimental: false }
           - { dart: '3.11.5', experimental: true }
           - { dart: '3.10.9', experimental: true }
           - { dart: '3.9.4',  experimental: true }

@@ -24,8 +24,21 @@
       "dll": "dartvm_3.12.2_windows_x64.dll",
       "file": "dartvm-3.12.2-windows-x64.zip",
       "url": "https://github.com/QIUHONG520/fiet-win-dart/releases/download/v0.1.0-poc/dartvm-3.12.2-windows-x64.zip",
-      "sha256": "173f848795f5716bcf80695755c77ed1e9cc1516abeec3b3d1d7da3a69d9157a",
-      "sizeBytes": 16444033,
+      "sha256": "cc6859b57f880067163837a332b7c323e2403318344ccc8a9f0e1f60ea9105bf",
+      "sizeBytes": 16443835,
+      "runtimeDeps": [
+        "capstone.dll",
+        "icuuc73.dll",
+        "icudt73.dll"
+      ]
+    },
+    {
+      "dartVersion": "3.13.5",
+      "dll": "dartvm_3.13.5_windows_x64.dll",
+      "file": "dartvm-3.13.5-windows-x64.zip",
+      "url": "https://github.com/QIUHONG520/fiet-win-dart/releases/download/v0.1.0-poc/dartvm-3.13.5-windows-x64.zip",
+      "sha256": "a294fb5fcb9727085eef90fd3f9553502fd7c4fa675c95f8c35bc84d16db22fb",
+      "sizeBytes": 16430035,
       "runtimeDeps": [
         "capstone.dll",
         "icuuc73.dll",

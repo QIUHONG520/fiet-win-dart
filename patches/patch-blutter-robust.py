@@ -168,11 +168,11 @@ uint64_t target = (uint64_t)insn.ops(0).imm;""", """\t\t// cmp SP, TMP. If it is
 \t\t// and let the generic parser handle the valid instructions.
 \t\tif (insn.id() != ARM64_INS_CMP ||
 \t\t\tinsn.ops(0).reg != CSREG_DART_SP ||
-\t\t\tinsn.ops(1).reg != CSREG_DART_TMP) return nullptr;
+\t\t\tinsn.ops(1).reg != CSREG_DART_TMP) FLER_SPLIT_CFG_BAIL;
 \t\t++insn;
 
 \t\tif (insn.id() != ARM64_INS_B || insn.ops(0).type != ARM64_OP_IMM)
-\t\t\treturn nullptr;
+\t\t\tFLER_SPLIT_CFG_BAIL;
 \t\tuint64_t target = (uint64_t)insn.ops(0).imm;""", 1)
     # ADD PP, #imm followed by a branch is not an adjacent pool load.
     s = s.replace("""\t\t\telse {
@@ -188,11 +188,11 @@ uint64_t target = (uint64_t)insn.ops(0).imm;""", """\t\t// cmp SP, TMP. If it is
 def arm64_analyzer_recovery(s):
     # Do not abort an entire analysis for patterns that are valid but not
     # recognized by the current Dart-version matcher.
-    s = s.replace('''\t\t\tINSN_ASSERT(insn.id() == ARM64_INS_B && insn.cc() == ARM64_CC_EQ);''', '''\t\t\tif (insn.id() != ARM64_INS_B || insn.cc() != ARM64_CC_EQ) return nullptr;''', 1)
+    s = s.replace('''\t\t\tINSN_ASSERT(insn.id() == ARM64_INS_B && insn.cc() == ARM64_CC_EQ);''', '''\t\t\tif (insn.id() != ARM64_INS_B || insn.cc() != ARM64_CC_EQ) FLER_SPLIT_CFG_BAIL;''', 1)
     s = s.replace('''\t\tif (insn.id() != ARM64_INS_STR && insn.id() != ARM64_INS_LDR) {
 \t\t\tFATAL(\"static field without STR or LDR\");
 \t\t}''', '''\t\tif (insn.id() != ARM64_INS_STR && insn.id() != ARM64_INS_LDR) {
-\t\t\treturn nullptr;
+\t\t\tFLER_SPLIT_CFG_BAIL;
 \t\t}''', 1)
     # Field-table metadata can be stale/misaligned in optimized snapshots. It
     # is still a normal static-field load; preserve that IL instead of throwing.
@@ -204,7 +204,7 @@ def arm64_analyzer_recovery(s):
     s=s.replace(needle,replacement,1)
     # Same mismatch occurs in the late-initialization error path; reject the
     # specialized pattern and let the generic parser continue.
-    s=s.replace('''\t\t\t\t\tINSN_ASSERT(dartField.Offset() == field_offset);''', '''\t\t\t\t\tif (dartField.Offset() != field_offset) return nullptr;''', 1)
+    s=s.replace('''\t\t\t\t\tINSN_ASSERT(dartField.Offset() == field_offset);''', '''\t\t\t\t\tif (dartField.Offset() != field_offset) FLER_SPLIT_CFG_BAIL;''', 1)
     # Prevent malformed matcher lookahead from spinning forever. Every pass
     # must advance the iterator; a hard bound is a final guard for bad CFGs.
     old='''\tAsmIterator insn(asm_insns.FirstPtr(), asm_insns.LastPtr());
@@ -277,11 +277,11 @@ def arm64_dart36_recovery(s):
     end=s.index("\n}\n\nstatic ArrayOp",pos)
     part=s[pos:end]
     for old,new in [
-        ("INSN_ASSERT(insn.id() == ARM64_INS_AND);", "if (insn.id() != ARM64_INS_AND) return nullptr;"),
-        ("INSN_ASSERT(insn.id() == ARM64_INS_TST);", "if (insn.id() != ARM64_INS_TST) return nullptr;"),
-        ("INSN_ASSERT(insn.id() == ARM64_INS_B && insn.cc() == ARM64_CC_EQ);", "if (insn.id() != ARM64_INS_B || insn.cc() != ARM64_CC_EQ) return nullptr;"),
-        ("INSN_ASSERT(insn.id() == ARM64_INS_LDR);", "if (insn.id() != ARM64_INS_LDR) return nullptr;"),
-        ("INSN_ASSERT(insn.id() == ARM64_INS_BLR);", "if (insn.id() != ARM64_INS_BLR) return nullptr;"),
+        ("INSN_ASSERT(insn.id() == ARM64_INS_AND);", "if (insn.id() != ARM64_INS_AND) FLER_SPLIT_CFG_BAIL;"),
+        ("INSN_ASSERT(insn.id() == ARM64_INS_TST);", "if (insn.id() != ARM64_INS_TST) FLER_SPLIT_CFG_BAIL;"),
+        ("INSN_ASSERT(insn.id() == ARM64_INS_B && insn.cc() == ARM64_CC_EQ);", "if (insn.id() != ARM64_INS_B || insn.cc() != ARM64_CC_EQ) FLER_SPLIT_CFG_BAIL;"),
+        ("INSN_ASSERT(insn.id() == ARM64_INS_LDR);", "if (insn.id() != ARM64_INS_LDR) FLER_SPLIT_CFG_BAIL;"),
+        ("INSN_ASSERT(insn.id() == ARM64_INS_BLR);", "if (insn.id() != ARM64_INS_BLR) FLER_SPLIT_CFG_BAIL;"),
     ]: part=part.replace(old,new,1)
     s=s[:pos]+part+s[end:]
     return s

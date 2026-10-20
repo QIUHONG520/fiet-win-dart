@@ -108,6 +108,12 @@ endif()
 if(NOT _has_as_truncated_int64)
     list(APPEND DART_COMPAT_DEFINITIONS UNIFORM_INTEGER_ACCESS)
 endif()
+# Dart 3.13 "single snapshot": OBJECT_STORE_STUB_CODE_LIST removed, VM stubs moved
+# to dart::StubCode. patches/patch-blutter-robust.py / prepare_blutter.py provide
+# the conditional DartStub/loadStubs implementations behind this macro.
+if(DART_VERSION VERSION_GREATER_EQUAL "3.13")
+    list(APPEND DART_COMPAT_DEFINITIONS BLUTTER_DART_3_13_SINGLE_SNAPSHOT)
+endif()
 message(STATUS "Dart ${DART_VERSION} compat defines: ${DART_COMPAT_DEFINITIONS}")
 
 set(COMMON_INCLUDES

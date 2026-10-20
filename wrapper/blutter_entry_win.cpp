@@ -1280,7 +1280,10 @@ FLER_DART_EXPORT int blutter_analyze(const char* so_path, const char* db_path, c
 
 // ─── Engine metadata (Windows) ─────────────
 // 供宿主（FIET）探测引擎版本与构建目标，不参与分析流程。
+#ifndef DART_VERSION
+#define DART_VERSION "unknown"
+#endif
 FLER_DART_EXPORT const char* fler_engine_info() {
-    return "fiet-win-dart 0.1.0; dart=3.12.2; target=android_arm64; host=windows_x64; "
+    return "fiet-win-dart 0.1.0; dart=" DART_VERSION "; target=android_arm64; host=windows_x64; "
            "exports=blutter_analyze,fler_engine_info";
 }

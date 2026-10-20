@@ -1,0 +1,26 @@
+# Third-party notices / licenses
+
+This repository builds a Windows x64 engine from several third-party projects.
+When you redistribute the built DLL package, keep the corresponding license
+texts/notices as listed below.
+
+| Component | Used as | License | Source |
+|---|---|---|---|
+| blutter | analysis sources + Windows build scripts (`blutter/`, `scripts/`, `external/`) | MIT | https://github.com/worawit/blutter (LICENSE) |
+| fler-dart | wrapper (`dartvm/src/blutter_entry.cpp`, `regexp_stubs.cpp`, robustness patches) and engine packaging/design | **No LICENSE file upstream**; redistributed here with the FIET project owner's explicit permission (repository owner is the same GitHub account). Keep this notice. | https://github.com/QIUHONG520/fler-dart |
+| Dart SDK / Dart VM | static VM library (`dartvm<ver>_android_arm64.lib`) built from Dart SDK sources; loaded snapshots are Android arm64 | BSD-3-Clause (Google) | https://github.com/dart-lang/sdk (LICENSE) |
+| Capstone | disassembly engine; ships as `capstone.dll` (upstream blutter's Windows dependency, capstone 4.0.2) | BSD-3-Clause | https://github.com/capstone-engine/capstone |
+| ICU | unicode/internationalization; ships as `icuuc73.dll` / `icudt73.dll` (ICU 73.2 MSVC build used by upstream blutter on Windows) | Unicode License v3 | https://github.com/unicode-org/icu |
+| SQLite | result database (amalgamation compiled into the DLL) | Public Domain | https://sqlite.org |
+
+Notes:
+
+* The Dart VM snapshot loader is configured ("blutter trick") with
+  `DART_TARGET_OS_ANDROID`, `TARGET_ARCH_ARM64`, `DART_PRECOMPILED_RUNTIME`,
+  `PRODUCT`, `DART_COMPRESSED_POINTERS` while being compiled for Windows x64;
+  this mirrors upstream blutter's approach and means the engine analyzes
+  **Android arm64 Flutter AOT snapshots** on a Windows host.
+* Dart SDK license text is available at
+  https://github.com/dart-lang/sdk/blob/main/LICENSE.
+* Do not distribute this engine as part of a product without also complying with
+  the licenses above and the Dart/Flutter redistribution terms.
